@@ -19,6 +19,7 @@ import {
 import { FORM_STYLE } from '@/const/layoutTokens';
 import { useUserStore } from '@/store/user';
 import { keyVaultsConfigSelectors, modelConfigSelectors } from '@/store/user/selectors';
+import { ModelProviderCard } from '@/types/llm';
 import { GlobalLLMProviderKey } from '@/types/user/settings';
 
 import Checker from '../Checker';
@@ -46,36 +47,26 @@ const useStyles = createStyles(({ css, prefixCls, responsive }) => ({
   `,
 }));
 
-interface ProviderConfigProps {
+export interface ProviderConfigProps extends Omit<ModelProviderCard, 'id'> {
   apiKeyItems?: FormItemProps[];
   canDeactivate?: boolean;
-  checkModel?: string;
   checkerItem?: FormItemProps;
   className?: string;
   hideSwitch?: boolean;
+  id: GlobalLLMProviderKey;
   modelList?: {
     azureDeployName?: boolean;
     notFoundContent?: ReactNode;
     placeholder?: string;
     showModelFetcher?: boolean;
   };
-  provider: GlobalLLMProviderKey;
-  proxyUrl?:
-    | {
-        desc?: string;
-        placeholder: string;
-        title?: string;
-      }
-    | false;
-  showApiKey?: boolean;
-  showBrowserRequest?: boolean;
   title: ReactNode;
 }
 
 const ProviderConfig = memo<ProviderConfigProps>(
   ({
     apiKeyItems,
-    provider,
+    id,
     proxyUrl,
     showApiKey = true,
     checkModel,
@@ -85,9 +76,9 @@ const ProviderConfig = memo<ProviderConfigProps>(
     modelList,
     showBrowserRequest,
     className,
+    name,
   }) => {
     const { t } = useTranslation('setting');
-    const { t: modelT } = useTranslation('modelProvider');
     const [form] = Form.useForm();
     const { cx, styles } = useStyles();
     const [
@@ -96,12 +87,14 @@ const ProviderConfig = memo<ProviderConfigProps>(
       enabled,
       isFetchOnClient,
       isProviderEndpointNotEmpty,
+      isProviderApiKeyNotEmpty,
     ] = useUserStore((s) => [
       s.toggleProviderEnabled,
       s.setSettings,
-      modelConfigSelectors.isProviderEnabled(provider)(s),
-      modelConfigSelectors.isProviderFetchOnClient(provider)(s),
-      keyVaultsConfigSelectors.isProviderEndpointNotEmpty(provider)(s),
+      modelConfigSelectors.isProviderEnabled(id)(s),
+      modelConfigSelectors.isProviderFetchOnClient(id)(s),
+      keyVaultsConfigSelectors.isProviderEndpointNotEmpty(id)(s),
+      keyVaultsConfigSelectors.isProviderApiKeyNotEmpty(id)(s),
     ]);
 
     useSyncSettings(form);
@@ -113,12 +106,12 @@ const ProviderConfig = memo<ProviderConfigProps>(
             children: (
               <Input.Password
                 autoComplete={'new-password'}
-                placeholder={modelT(`${provider}.token.placeholder` as any)}
+                placeholder={t(`llm.apiKey.placeholder`, { name })}
               />
             ),
-            desc: modelT(`${provider}.token.desc` as any),
-            label: modelT(`${provider}.token.title` as any),
-            name: [KeyVaultsConfigKey, provider, LLMProviderApiTokenKey],
+            desc: t(`llm.apiKey.desc`, { name }),
+            label: t(`llm.apiKey.title`),
+            name: [KeyVaultsConfigKey, id, LLMProviderApiTokenKey],
           },
         ];
 
@@ -129,13 +122,21 @@ const ProviderConfig = memo<ProviderConfigProps>(
         children: <Input allowClear placeholder={proxyUrl?.placeholder} />,
         desc: proxyUrl?.desc || t('llm.proxyUrl.desc'),
         label: proxyUrl?.title || t('llm.proxyUrl.title'),
-        name: [KeyVaultsConfigKey, provider, LLMProviderBaseUrlKey],
+        name: [KeyVaultsConfigKey, id, LLMProviderBaseUrlKey],
       },
-      (showBrowserRequest || (showEndpoint && isProviderEndpointNotEmpty)) && {
+      /*
+       * Conditions to show Client Fetch Switch
+       * 1. Component props
+       * 2. Provider allow to edit endpoint and the value of endpoint is not empty
+       * 3. There is an apikey provided by user
+       */
+      (showBrowserRequest ||
+        (showEndpoint && isProviderEndpointNotEmpty) ||
+        (showApiKey && isProviderApiKeyNotEmpty)) && {
         children: (
           <Switch
             onChange={(enabled) => {
-              setSettings({ [LLMProviderConfigKey]: { [provider]: { fetchOnClient: enabled } } });
+              setSettings({ [LLMProviderConfigKey]: { [id]: { fetchOnClient: enabled } } });
             }}
             value={isFetchOnClient}
           />
@@ -149,22 +150,26 @@ const ProviderConfig = memo<ProviderConfigProps>(
           <ProviderModelListSelect
             notFoundContent={modelList?.notFoundContent}
             placeholder={modelList?.placeholder ?? t('llm.modelList.placeholder')}
-            provider={provider}
+            provider={id}
             showAzureDeployName={modelList?.azureDeployName}
             showModelFetcher={modelList?.showModelFetcher}
           />
         ),
         desc: t('llm.modelList.desc'),
         label: t('llm.modelList.title'),
-        name: [LLMProviderConfigKey, provider, LLMProviderModelListKey],
+        name: [LLMProviderConfigKey, id, LLMProviderModelListKey],
       },
       checkerItem ?? {
-        children: <Checker model={checkModel!} provider={provider} />,
+        children: <Checker model={checkModel!} provider={id} />,
         desc: t('llm.checker.desc'),
         label: t('llm.checker.title'),
         minWidth: undefined,
       },
     ].filter(Boolean) as FormItemProps[];
+
+    /* ↓ cloud slot ↓ */
+
+    /* ↑ cloud slot ↑ */
 
     const model: ItemGroup = {
       children: formItems,
@@ -173,7 +178,7 @@ const ProviderConfig = memo<ProviderConfigProps>(
       extra: canDeactivate ? (
         <Switch
           onChange={(enabled) => {
-            toggleProviderEnabled(provider, enabled);
+            toggleProviderEnabled(id, enabled);
           }}
           value={enabled}
         />
