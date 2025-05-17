@@ -3,7 +3,7 @@ import { isEmpty } from 'lodash-es';
 
 import { DEFAULT_MODEL_PROVIDER_LIST } from '@/config/modelProviders';
 import { LobeChatDatabase } from '@/database/type';
-import { ModelProvider } from '@/libs/agent-runtime';
+import { ModelProvider } from '@/libs/model-runtime';
 import {
   AiProviderDetailItem,
   AiProviderListItem,
@@ -251,9 +251,19 @@ export class AiProviderModel {
       const builtin = DEFAULT_MODEL_PROVIDER_LIST.find((provider) => provider.id === item.id);
 
       const userSettings = item.settings || {};
+
+      let keyVaults = {};
+      if (!!item.keyVaults) {
+        try {
+          keyVaults = await decrypt(item.keyVaults);
+        } catch {
+          /* empty */
+        }
+      }
+
       runtimeConfig[item.id] = {
         fetchOnClient: typeof item.fetchOnClient === 'boolean' ? item.fetchOnClient : undefined,
-        keyVaults: !!item.keyVaults ? await decrypt(item.keyVaults) : {},
+        keyVaults,
         settings: !!builtin ? merge(builtin.settings, userSettings) : userSettings,
       };
     }
