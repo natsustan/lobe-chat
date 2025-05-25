@@ -6,7 +6,7 @@ import { Suspense, memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useProviderName } from '@/hooks/useProviderName';
-import { AgentRuntimeErrorType, ILobeAgentRuntimeErrorType } from '@/libs/agent-runtime';
+import { AgentRuntimeErrorType, ILobeAgentRuntimeErrorType } from '@/libs/model-runtime';
 import { ChatErrorType, ErrorType } from '@/types/fetch';
 import { ChatMessage, ChatMessageError } from '@/types/message';
 
@@ -19,7 +19,8 @@ import { ErrorActionContainer } from './style';
 const loading = () => <Skeleton active />;
 
 const OllamaBizError = dynamic(() => import('./OllamaBizError'), { loading, ssr: false });
-const OllamaSetupGuide = dynamic(() => import('./OllamaBizError/SetupGuide'), {
+
+const OllamaSetupGuide = dynamic(() => import('@/features/OllamaSetupGuide'), {
   loading,
   ssr: false,
 });
@@ -90,9 +91,8 @@ const ErrorMessageExtra = memo<{ data: ChatMessage }>(({ data }) => {
   if (!error?.type) return;
 
   switch (error.type) {
-    // TODO: 优化 Ollama setup 的流程，isDesktop 模式下可以直接做到端到端检测
     case AgentRuntimeErrorType.OllamaServiceUnavailable: {
-      return <OllamaSetupGuide />;
+      return <OllamaSetupGuide id={data.id} />;
     }
 
     case AgentRuntimeErrorType.OllamaBizError: {
