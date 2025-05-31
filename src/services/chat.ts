@@ -8,13 +8,13 @@ import { INBOX_GUIDE_SYSTEMROLE } from '@/const/guide';
 import { INBOX_SESSION_ID } from '@/const/session';
 import { DEFAULT_AGENT_CONFIG } from '@/const/settings';
 import { TracePayload, TraceTagMap } from '@/const/trace';
-import { isDeprecatedEdition, isServerMode } from '@/const/version';
+import { isDeprecatedEdition, isDesktop, isServerMode } from '@/const/version';
 import {
   AgentRuntime,
   AgentRuntimeError,
   ChatCompletionErrorPayload,
   ModelProvider,
-} from '@/libs/agent-runtime';
+} from '@/libs/model-runtime';
 import { filesPrompts } from '@/prompts/files';
 import { BuiltinSystemRolePrompts } from '@/prompts/systemRole';
 import { getAgentStoreState } from '@/store/agent';
@@ -133,7 +133,7 @@ interface CreateAssistantMessageStream extends FetchSSEOptions {
  *
  * **Note**: if you try to fetch directly, use `fetchOnClient` instead.
  */
-export function initializeWithClientStore(provider: string, payload: any) {
+export function initializeWithClientStore(provider: string, payload?: any) {
   /**
    * Since #5267, we map parameters for client-fetch in function `getProviderAuthPayload`
    * which called by `createPayloadWithKeyVaults` below.
@@ -180,6 +180,7 @@ class ChatService {
     )(getAiInfraStoreState());
 
     const useModelSearch = isModelHasBuiltinSearch && chatConfig.useModelBuiltinSearch;
+
     const useApplicationBuiltinSearchTool = enabledSearch && !useModelSearch;
 
     const pluginIds = [...(enabledPlugins || [])];
@@ -224,17 +225,29 @@ class ChatService {
       )(getAiInfraStoreState());
       // if model has extended params, then we need to check if the model can use reasoning
 
-      if (modelExtendParams!.includes('enableReasoning') && chatConfig.enableReasoning) {
-        extendParams.thinking = {
-          budget_tokens: chatConfig.reasoningBudgetToken || 1024,
-          type: 'enabled',
-        };
+      if (modelExtendParams!.includes('enableReasoning')) {
+        if (chatConfig.enableReasoning) {
+          extendParams.thinking = {
+            budget_tokens: chatConfig.reasoningBudgetToken || 1024,
+            type: 'enabled',
+          };
+        } else {
+          extendParams.thinking = {
+            budget_tokens: 0,
+            type: 'disabled',
+          };
+        }
       }
+
       if (
         modelExtendParams!.includes('disableContextCaching') &&
         chatConfig.disableContextCaching
       ) {
         extendParams.enabledContextCaching = false;
+      }
+
+      if (modelExtendParams!.includes('reasoningEffort') && chatConfig.reasoningEffort) {
+        extendParams.reasoning_effort = chatConfig.reasoningEffort;
       }
     }
 
@@ -286,7 +299,6 @@ class ChatService {
     const providersWithDeploymentName = [
       ModelProvider.Azure,
       ModelProvider.Volcengine,
-      ModelProvider.Doubao,
       ModelProvider.AzureAI,
     ] as string[];
 
@@ -480,7 +492,9 @@ class ChatService {
 
       const imageList = m.imageList || [];
 
-      const filesContext = isServerMode ? filesPrompts({ fileList: m.fileList, imageList }) : '';
+      const filesContext = isServerMode
+        ? filesPrompts({ addUrl: !isDesktop, fileList: m.fileList, imageList })
+        : '';
       return [
         { text: (m.content + '\n\n' + filesContext).trim(), type: 'text' },
         ...imageList.map(
